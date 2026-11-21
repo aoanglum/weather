@@ -11,7 +11,7 @@
 :root{--bg:#0f172a;--card:#1e293b;--text:#f1f5f9;--dim:#94a3b8;--accent:#38bdf8}
 @media (prefers-color-scheme:light){:root{--bg:#e0f2fe;--card:#fff;--text:#0f172a;--dim:#475569;--accent:#0369a1}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:16px -apple-system,system-ui,sans-serif;padding:max(16px,env(safe-area-inset-top)) 16px 32px}
+body{margin:0;background:var(--bg) var(--grad,none) fixed;transition:background 1s;color:var(--text);font:16px -apple-system,system-ui,sans-serif;padding:max(16px,env(safe-area-inset-top)) 16px 32px}
 main{max-width:520px;margin:0 auto}
 form{display:flex;gap:8px;position:relative}
 input{flex:1;min-width:0;padding:12px;border-radius:12px;border:0;background:var(--card);color:var(--text);font-size:16px}
@@ -30,6 +30,20 @@ button{border:0;border-radius:12px;background:var(--card);color:var(--text);font
 .day{display:grid;grid-template-columns:60px 32px 1fr auto auto;align-items:center;gap:8px;padding:8px 0}
 .day+.day{border-top:1px solid var(--bg)}
 .rain{color:var(--accent);font-size:13px}
+.now .icon{display:inline-block;animation:bob 3s ease-in-out infinite}
+@keyframes bob{50%{transform:translateY(-8px) rotate(4deg)}}
+.quip{margin-top:8px;font-weight:600;color:var(--accent)}
+.card{animation:rise .5s both}.card:nth-of-type(2){animation-delay:.08s}.card:nth-of-type(3){animation-delay:.16s}
+@keyframes rise{from{opacity:0;transform:translateY(12px)}}
+.flake{position:fixed;top:-20px;pointer-events:none;color:#fff;opacity:.8;animation:fall linear infinite;z-index:0}
+@keyframes fall{to{transform:translateY(110vh) translateX(30px)}}
+main{position:relative;z-index:1}
+.ski h3{margin:0 0 2px;font-size:18px}
+.ski .total{font-size:30px;font-weight:300}
+.sday{display:grid;grid-template-columns:50px 1fr 52px;align-items:center;gap:8px;padding:5px 0}
+.bar{height:12px;border-radius:6px;background:var(--bg);overflow:hidden}
+.bar i{display:block;height:100%;background:linear-gradient(90deg,#7dd3fc,#fff);border-radius:6px}
+.pow{display:inline-block;background:#f97316;color:#fff;border-radius:8px;padding:1px 7px;font-size:12px;font-weight:700;margin-left:6px}
 #err{color:#f87171;margin-top:12px}
 </style>
 </head>
@@ -47,7 +61,27 @@ button{border:0;border-radius:12px;background:var(--card);color:var(--text);font
 const $ = id => document.getElementById(id);
 const DEFAULT = {name:"Denver, Colorado", lat:39.7392, lon:-104.9903};
 const UV = v => { v=Math.round(v||0); return [v, v<3?"Low":v<6?"Moderate":v<8?"High":v<11?"Very high":"Extreme"]; };
-const WX = c => c===0?["☀️","Clear"]:c<=2?["🌤️","Partly cloudy"]:c==3?["☁️","Overcast"]:c<=48?["🌫️","Fog"]:c<=57?["🌦️","Drizzle"]:c<=67?["🌧️","Rain"]:c<=77?["🌨️","Snow"]:c<=82?["🌦️","Showers"]:c<=86?["🌨️","Snow showers"]:["⛈️","Thunderstorms"];
+const WX = (c,day=1) => !day&&c===0?["🌙","Clear"]:!day&&c<=2?["☁️","Partly cloudy"]: c===0?["☀️","Clear"]:c<=2?["🌤️","Partly cloudy"]:c==3?["☁️","Overcast"]:c<=48?["🌫️","Fog"]:c<=57?["🌦️","Drizzle"]:c<=67?["🌧️","Rain"]:c<=77?["🌨️","Snow"]:c<=82?["🌦️","Showers"]:c<=86?["🌨️","Snow showers"]:["⛈️","Thunderstorms"];
+const THEME = c => c===0?"linear-gradient(#38bdf8,#0f172a)":c<=3?"linear-gradient(#64748b,#0f172a)":c<=48?"linear-gradient(#94a3b8,#1e293b)":c<=67||(c>=80&&c<=82)?"linear-gradient(#475569,#0b1220)":c<=86?"linear-gradient(#93c5fd,#1e293b)":"linear-gradient(#581c87,#0b1220)";
+const QUIP = (c,t) => c>=95?"Thunder! Stay inside, hero. ⚡":(c>=71&&c<=77)||c==85||c==86?"Snow day energy. Go find some turns. 🎿":c>=51&&c<=82?"Bring a jacket, or embrace the splash. ☔":t>=90?"Hot enough to melt a Rocky Mountain snowcone. 🥵":t>=75?"Shorts weather. No notes. 😎":t>=55?"Perfect hoodie weather. 🧢":t>=35?"Brisk! Coffee recommended. ☕":t>=15?"Cold enough to see your breath. Layers! 🧣":"Absolutely frigid. Stay warm out there. 🥶";
+function snowfx(on){document.querySelectorAll(".flake").forEach(f=>f.remove());if(!on)return;for(let i=0;i<28;i++){const f=document.createElement("div");f.className="flake";f.textContent="❄";f.style.left=Math.random()*100+"vw";f.style.fontSize=(8+Math.random()*14)+"px";f.style.animationDuration=(6+Math.random()*8)+"s";f.style.animationDelay=(-Math.random()*10)+"s";document.body.appendChild(f);}}
+const SKI = [
+  {name:"Winter Park", emoji:"🏔️", lat:39.8868, lon:-105.7625, elev:3676},
+  {name:"Arapahoe Basin", emoji:"⛷️", lat:39.6426, lon:-105.8719, elev:3978},
+];
+async function skiCard(r){
+  try{
+    const u="https://api.open-meteo.com/v1/forecast?latitude="+r.lat+"&longitude="+r.lon+"&elevation="+r.elev+
+      "&daily=snowfall_sum,temperature_2m_max,temperature_2m_min,wind_speed_10m_max&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&forecast_days=5";
+    const d=(await (await fetch(u)).json()).daily;
+    const inch=d.snowfall_sum.map(x=>x/2.54), total=inch.reduce((a,b)=>a+b,0), max=Math.max(6,...inch);
+    const rows=d.time.map((t,i)=>{const nm=i===0?"Today":new Date(t+"T12:00").toLocaleDateString(undefined,{weekday:"short"});
+      return `<div class="sday"><div>${nm}</div><div class="bar"><i style="width:${Math.round(inch[i]/max*100)}%"></i></div><div>${inch[i].toFixed(1)}"${inch[i]>=6?'<span class="pow">POW</span>':""}</div></div>`}).join("");
+    const mood=total>=12?"Send it! Big dump incoming. 🤙":total>=4?"Fresh snow on the way. ❄️":total>0.5?"A dusting. Better than nothing.":"Dry spell. Rain dance for snow? 💃";
+    return `<div class="card ski"><h3>${r.emoji} ${r.name}</h3><div class="dim">Summit forecast · ${Math.round(r.elev*3.281).toLocaleString()} ft · high ${Math.round(Math.max(...d.temperature_2m_max))}° · wind up to ${Math.round(Math.max(...d.wind_speed_10m_max))} mph</div>
+      <div class="total">${total.toFixed(1)}" <span class="dim">next 5 days</span></div><div class="quip" style="margin:0 0 8px">${mood}</div>${rows}</div>`;
+  }catch(e){return `<div class="card ski"><h3>${r.name}</h3><div class="dim">Couldn't load snow forecast.</div></div>`}
+}
 const save = p => { try{localStorage.setItem("wx.place",JSON.stringify(p))}catch(e){} };
 const load = () => { try{return JSON.parse(localStorage.getItem("wx.place"))||DEFAULT}catch(e){return DEFAULT} };
 
@@ -55,20 +89,20 @@ async function show(p){
   $("err").textContent=""; $("results").hidden=true;
   try{
     const u = "https://api.open-meteo.com/v1/forecast?latitude="+p.lat+"&longitude="+p.lon+
-      "&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code,uv_index"+
-      "&hourly=temperature_2m,weather_code,precipitation_probability"+
+      "&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code,uv_index,is_day"+
+      "&hourly=temperature_2m,weather_code,is_day,precipitation_probability"+
       "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,uv_index_max"+
       "&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&forecast_days=7";
     const r = await fetch(u); if(!r.ok) throw new Error("Weather service returned "+r.status);
     const d = await r.json();
     save(p);
-    const c = d.current, [ic,desc] = WX(c.weather_code);
+    const c = d.current, [ic,desc] = WX(c.weather_code,c.is_day);
     const start = Math.max(0, d.hourly.time.findIndex(t => t >= c.time.slice(0,13)));
     let hours = "";
     for(let i=start;i<start+24&&i<d.hourly.time.length;i++){
       const h = new Date(d.hourly.time[i]).getHours();
       const lab = i===start ? "Now" : (h%12||12)+(h<12?"a":"p");
-      hours += `<div class="hr"><div class="dim">${lab}</div><div>${WX(d.hourly.weather_code[i])[0]}</div><div>${Math.round(d.hourly.temperature_2m[i])}°</div><div class="rain">${d.hourly.precipitation_probability[i]||0}%</div></div>`;
+      hours += `<div class="hr"><div class="dim">${lab}</div><div>${WX(d.hourly.weather_code[i],d.hourly.is_day[i])[0]}</div><div>${Math.round(d.hourly.temperature_2m[i])}°</div><div class="rain">${d.hourly.precipitation_probability[i]||0}%</div></div>`;
     }
     let days = "";
     d.daily.time.forEach((t,i)=>{
@@ -79,9 +113,14 @@ async function show(p){
       <div class="card now"><div class="place">${p.name}</div><div class="icon">${ic}</div>
         <div class="temp">${Math.round(c.temperature_2m)}°</div><div>${desc}</div>
         <div class="dim">Feels ${Math.round(c.apparent_temperature)}° · Humidity ${c.relative_humidity_2m}% · Wind ${Math.round(c.wind_speed_10m)} mph</div>
+        <div class="quip">${QUIP(c.weather_code,c.temperature_2m)}</div>
         <div class="dim">UV ${UV(c.uv_index)[0]} · ${UV(c.uv_index)[1]} (today's peak ${UV(d.daily.uv_index_max[0])[0]})</div></div>
       <div class="card"><div class="dim" style="margin-bottom:10px">Next 24 hours</div><div class="strip">${hours}</div></div>
-      <div class="card"><div class="dim">7-day forecast</div>${days}</div>`;
+      <div class="card"><div class="dim">7-day forecast</div>${days}</div><div id="ski"></div>`;
+    document.documentElement.style.setProperty("--grad",THEME(c.weather_code));
+    document.body.style.setProperty("--grad",THEME(c.weather_code));
+    snowfx((c.weather_code>=71&&c.weather_code<=77)||c.weather_code==85||c.weather_code==86);
+    Promise.all(SKI.map(skiCard)).then(h=>{const el=$("ski");if(el)el.innerHTML='<div style="margin:18px 4px 0;font-weight:700;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.5)">🎿 5-day snow forecasts</div>'+h.join("")});
   }catch(e){ $("err").textContent = "Couldn't load weather: "+e.message; }
 }
 
