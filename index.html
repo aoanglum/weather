@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Weather">
+<meta name="theme-color" content="#0f172a">
+<title>Weather</title>
+<style>
+:root{--bg:#0f172a;--card:#1e293b;--text:#f1f5f9;--dim:#94a3b8;--accent:#38bdf8}
+@media (prefers-color-scheme:light){:root{--bg:#e0f2fe;--card:#fff;--text:#0f172a;--dim:#475569;--accent:#0369a1}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px -apple-system,system-ui,sans-serif;padding:max(16px,env(safe-area-inset-top)) 16px 32px}
+main{max-width:520px;margin:0 auto}
+form{display:flex;gap:8px;position:relative}
+input{flex:1;min-width:0;padding:12px;border-radius:12px;border:0;background:var(--card);color:var(--text);font-size:16px}
+button{border:0;border-radius:12px;background:var(--card);color:var(--text);font-size:18px;padding:0 14px;cursor:pointer}
+#results{list-style:none;margin:6px 0 0;padding:0;background:var(--card);border-radius:12px;overflow:hidden}
+#results li{padding:12px;border-bottom:1px solid var(--bg);cursor:pointer}
+.card{background:var(--card);border-radius:18px;padding:18px;margin-top:14px}
+.now{text-align:center}
+.now .place{color:var(--dim)}
+.now .temp{font-size:84px;font-weight:200;line-height:1}
+.now .icon{font-size:56px}
+.dim{color:var(--dim);font-size:14px}
+.strip{display:flex;gap:16px;overflow-x:auto;padding-bottom:4px}
+.hr{flex:none;text-align:center;min-width:44px}
+.hr div:nth-child(2){font-size:22px;margin:4px 0}
+.day{display:grid;grid-template-columns:70px 32px 1fr auto;align-items:center;gap:8px;padding:8px 0}
+.day+.day{border-top:1px solid var(--bg)}
+.rain{color:var(--accent);font-size:13px}
+#err{color:#f87171;margin-top:12px}
+</style>
+</head>
+<body>
+<main>
+  <form id="f">
+    <input id="q" placeholder="Search city…" autocomplete="off">
+    <button type="button" id="loc" title="Use my location" aria-label="Use my location">📍</button>
+  </form>
+  <ul id="results" hidden></ul>
+  <div id="err"></div>
+  <div id="app"></div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const DEFAULT = {name:"Denver, Colorado", lat:39.7392, lon:-104.9903};
+const WX = c => c===0?["☀️","Clear"]:c<=2?["🌤️","Partly cloudy"]:c==3?["☁️","Overcast"]:c<=48?["🌫️","Fog"]:c<=57?["🌦️","Drizzle"]:c<=67?["🌧️","Rain"]:c<=77?["🌨️","Snow"]:c<=82?["🌦️","Showers"]:c<=86?["🌨️","Snow showers"]:["⛈️","Thunderstorms"];
+const save = p => { try{localStorage.setItem("wx.place",JSON.stringify(p))}catch(e){} };
+const load = () => { try{return JSON.parse(localStorage.getItem("wx.place"))||DEFAULT}catch(e){return DEFAULT} };
+
+async function show(p){
+  $("err").textContent=""; $("results").hidden=true;
+  try{
+    const u = "https://api.open-meteo.com/v1/forecast?latitude="+p.lat+"&longitude="+p.lon+
+      "&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code"+
+      "&hourly=temperature_2m,weather_code,precipitation_probability"+
+      "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max"+
+      "&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&forecast_days=7";
+    const r = await fetch(u); if(!r.ok) throw new Error("Weather service returned "+r.status);
+    const d = await r.json();
+    save(p);
+    const c = d.current, [ic,desc] = WX(c.weather_code);
+    const start = Math.max(0, d.hourly.time.findIndex(t => t >= c.time.slice(0,13)));
+    let hours = "";
+    for(let i=start;i<start+24&&i<d.hourly.time.length;i++){
+      const h = new Date(d.hourly.time[i]).getHours();
+      const lab = i===start ? "Now" : (h%12||12)+(h<12?"a":"p");
+      hours += `<div class="hr"><div class="dim">${lab}</div><div>${WX(d.hourly.weather_code[i])[0]}</div><div>${Math.round(d.hourly.temperature_2m[i])}°</div><div class="rain">${d.hourly.precipitation_probability[i]||0}%</div></div>`;
+    }
+    let days = "";
+    d.daily.time.forEach((t,i)=>{
+      const name = i===0?"Today":new Date(t+"T12:00").toLocaleDateString(undefined,{weekday:"short"});
+      days += `<div class="day"><div>${name}</div><div>${WX(d.daily.weather_code[i])[0]}</div><div class="rain">${d.daily.precipitation_probability_max[i]||0}%</div><div>${Math.round(d.daily.temperature_2m_max[i])}° <span class="dim">${Math.round(d.daily.temperature_2m_min[i])}°</span></div></div>`;
+    });
+    $("app").innerHTML = `
+      <div class="card now"><div class="place">${p.name}</div><div class="icon">${ic}</div>
+        <div class="temp">${Math.round(c.temperature_2m)}°</div><div>${desc}</div>
+        <div class="dim">Feels ${Math.round(c.apparent_temperature)}° · Humidity ${c.relative_humidity_2m}% · Wind ${Math.round(c.wind_speed_10m)} mph</div></div>
+      <div class="card"><div class="dim" style="margin-bottom:10px">Next 24 hours</div><div class="strip">${hours}</div></div>
+      <div class="card"><div class="dim">7-day forecast</div>${days}</div>`;
+  }catch(e){ $("err").textContent = "Couldn't load weather: "+e.message; }
+}
+
+$("f").addEventListener("submit", async e=>{
+  e.preventDefault();
+  const q = $("q").value.trim(); if(!q) return;
+  try{
+    const r = await fetch("https://geocoding-api.open-meteo.com/v1/search?count=5&name="+encodeURIComponent(q));
+    const j = await r.json(), ul = $("results");
+    if(!j.results){ $("err").textContent="No places found."; ul.hidden=true; return; }
+    $("err").textContent="";
+    ul.innerHTML = j.results.map((x,i)=>`<li data-i="${i}">${x.name}${x.admin1?", "+x.admin1:""}${x.country?" · "+x.country:""}</li>`).join("");
+    ul.hidden=false;
+    ul.onclick = ev => { const li=ev.target.closest("li"); if(!li) return; const x=j.results[li.dataset.i];
+      $("q").value=""; show({name:x.name+(x.admin1?", "+x.admin1:""), lat:x.latitude, lon:x.longitude}); };
+  }catch(e){ $("err").textContent="Search failed: "+e.message; }
+});
+$("loc").onclick = ()=>{
+  if(!navigator.geolocation){ $("err").textContent="Location isn't available here."; return; }
+  navigator.geolocation.getCurrentPosition(
+    pos=>show({name:"My location", lat:pos.coords.latitude, lon:pos.coords.longitude}),
+    ()=>{ $("err").textContent="Location permission denied."; });
+};
+show(load());
+</script>
+</body>
+</html>
